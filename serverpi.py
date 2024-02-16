@@ -71,56 +71,60 @@ class MyServer(BaseHTTPRequestHandler):
         self.end_headers()
 
 
+# ... other methods remain unchanged ...
+
     def do_GET(self):
         global led_state, start_time
         self.do_HEAD()
         elapsed_time = round(time.time() - start_time, 2) if led_state else 0
 
         html = f'''
-           <html>
-           <head>
-               <title>WASH LED Control</title>
-               <script>
-                   document.addEventListener('DOMContentLoaded', (event) => {{
-                       var ledState = {str(led_state).lower()};
-                       var timerElement = document.getElementById("timer");
-                       var startTime = {start_time};
-                       var currentTime = Math.round(Date.now() / 1000);
+        <html>
+        <head>
+            <title>WASH LED Control</title>
+            <script>
+                document.addEventListener('DOMContentLoaded', (event) => {{
+                    var ledState = {str(led_state).lower()};
+                    var timerElement = document.getElementById("timer");
+                    var startTime = {start_time};
 
-                       function updateTimer() {{
-                           if (ledState) {{
-                               timerElement.innerHTML = (currentTime - startTime).toFixed(2);
-                           }}
-                       }}
+                    function updateTimer() {{
+                        if (ledState) {{
+                            var currentTime = Math.round(Date.now() / 1000);
+                            timerElement.innerHTML = (currentTime - startTime).toFixed(2);
+                        }}
+                    }}
 
-                       if (ledState) {{
-                           timerInterval = setInterval(updateTimer, 1000);
-                       }}
-                   }});
+                    var timerInterval;
+                    if (ledState) {{
+                        timerInterval = setInterval(updateTimer, 1000);
+                    }}
 
-                   function sendCommand(command) {{
-                       var xhttp = new XMLHttpRequest();
-                       xhttp.onreadystatechange = function() {{
-                           if (this.readyState == 4 && this.status == 200) {{
-                               clearInterval(timerInterval);
-                               if(command === 'Off') {{
-                                   ledState = false;
-                               }}
-                           }}
-                       }};
-                       xhttp.open("POST", "/", true);
-                       xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
-                       xhttp.send("submit=" + command);
-                   }}
-               </script>
-           </head>
-           <body style="width:960px; margin: 20px auto; font-family: Arial, sans-serif;">
-           <h1>WASH LED Control</h1>
-           <p>LED Timer: <span id="timer">{elapsed_time}</span> seconds</p>
-           <button onclick="sendCommand('On')" style="padding: 10px; font-size: 16px;">On</button>
-           <button onclick="sendCommand('Off')" style="padding: 10px; font-size: 16px;">Off</button>
-           </body>
-           </html>
+                    function sendCommand(command) {{
+                        var xhttp = new XMLHttpRequest();
+                        xhttp.onreadystatechange = function() {{
+                            if (this.readyState == 4 && this.status == 200) {{
+                                if(command === 'Off') {{
+                                    ledState = false;
+                                    clearInterval(timerInterval);
+                                    timerElement.innerHTML = '0.00'; // Reset the timer display when the LED is turned off
+                                }}
+                            }}
+                        }};
+                        xhttp.open("POST", "/", true);
+                        xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+                        xhttp.send("submit=" + command);
+                    }}
+                }});
+            </script>
+        </head>
+        <body style="width:960px; margin: 20px auto; font-family: Arial, sans-serif;">
+        <h1>WASH LED Control</h1>
+        <p>LED Timer: <span id="timer">{elapsed_time}</span> seconds</p>
+        <button onclick="sendCommand('On')" style="padding: 10px; font-size: 16px;">On</button>
+        <button onclick="sendCommand('Off')" style="padding: 10px; font-size: 16px;">Off</button>
+        </body>
+        </html>
         '''
         self.wfile.write(html.encode("utf-8"))
 
