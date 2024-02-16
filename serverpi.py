@@ -9,7 +9,7 @@ import time
 led = 5  # LED connected to D5
 grovepi.pinMode(led, "OUTPUT")
 
-host_name = '10.2.8.249'  # IP Address of Raspberry Pi
+host_name = '10.2.8.225'  # IP Address of Raspberry Pi
 host_port = 8000
 
 # Initialize variables to track LED state and time
