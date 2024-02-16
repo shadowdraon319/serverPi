@@ -1,25 +1,41 @@
 #!/usr/bin/env python3
 
+import RPi.GPIO as GPIO
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import grovepi
+from influxdb_client import InfluxDBClient, Point, WritePrecision
+from influxdb_client.client.write_api import SYNCHRONOUS
 import time
 
-# GrovePi setup
-led = 5  # LED connected to D5
-grovepi.pinMode(led, "OUTPUT")
+# InfluxDB Configuration
+token = os.environ.get("INFLUXDB_TOKEN")
+org = "sabresmedia"
+bucket = "sabresmedia"
+url = "http://10.2.8.225:8086"
 
-host_name = '10.2.8.225'  # IP Address of Raspberry Pi
-host_port = 8000
+# Setup InfluxDB client
+client = InfluxDBClient(url=url, token=token, org=org)
+write_api = client.write_api(write_options=SYNCHRONOUS)
 
-# Initialize variables to track LED state and time
-led_state = False
-start_time = 0
-duration = 0  # Duration for which the LED was on
+# GPIO Setup
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(18, GPIO.OUT)
 
-def getTemperature():
-    temp = os.popen("/opt/vc/bin/vcgencmd measure_temp").read()
-    return temp
+def log_led_state(state):
+    """
+    Log the LED state to InfluxDB.
+    """
+    try:
+        print(f"Attempting to log LED state: {state}")
+        point = Point("led_state") \
+            .tag("device", "raspberrypi") \
+            .field("state", state) \
+            .time(time.time_ns(), WritePrecision.NS)
+        write_api.write(bucket=bucket, org=org, record=point)
+        print("LED state logged successfully.")
+    except Exception as e:
+        print(f"Failed to log LED state: {e}")
 
 class MyServer(BaseHTTPRequestHandler):
     def do_HEAD(self):
@@ -34,15 +50,12 @@ class MyServer(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        global duration
-        html = f'''
+        html = '''
            <html>
            <body style="width:960px; margin: 20px auto;">
-           <h1>Welcome to my Raspberry Pi</h1>
-           <p>Current GPU temperature is {getTemperature()[5:]}</p>
-           <p>LED was on for {duration} seconds.</p>
+           <h1>Welcome to my Raspberry Pi LED Controller</h1>
            <form action="/" method="POST">
-               Turn LED :
+               Turn LED:
                <input type="submit" name="submit" value="On">
                <input type="submit" name="submit" value="Off">
            </form>
@@ -53,31 +66,33 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(html.encode("utf-8"))
 
     def do_POST(self):
-        global led_state, start_time, duration
-        content_length = int(self.headers['Content-Length'])  # Gets the size of data
-        post_data = self.rfile.read(content_length).decode("utf-8")  # Gets the data itself
-        post_data = post_data.split("=")[1]  # Parses the data
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode("utf-8")
+        post_data = post_data.split("=")[1]
 
-        if post_data == 'On' and not led_state:
-            led_state = True
-            start_time = time.time()
-            grovepi.digitalWrite(led, 1)  # Turn LED on
-        elif post_data == 'Off' and led_state:
-            led_state = False
-            end_time = time.time()
-            duration = round(end_time - start_time, 2)  # Calculate duration in seconds
-            grovepi.digitalWrite(led, 0)  # Turn LED off
+        if post_data == 'On':
+            GPIO.output(18, GPIO.HIGH)
+            log_led_state(1)
+        else:
+            GPIO.output(18, GPIO.LOW)
+            log_led_state(0)
 
         print(f"LED is {post_data}")
-        print(f"LED was on for {duration} seconds.") if duration else print("")
         self._redirect('/')  # Redirect back to the root url
 
-# Main
 if __name__ == '__main__':
+    host_name = '10.2.8.225'  # Listen on all interfaces
+    host_port = 8000
+
     http_server = HTTPServer((host_name, host_port), MyServer)
-    print("Server Starts - %s:%s" % (host_name, host_port))
+    print(f"Server Starts - {host_name}:{host_port}")
 
     try:
         http_server.serve_forever()
     except KeyboardInterrupt:
-        http_server.server_close()
+        pass
+
+    http_server.server_close()
+    GPIO.cleanup()  # Clean up GPIO
+    client.close()  # Close InfluxDB client
+    print("Server Stopped.")
