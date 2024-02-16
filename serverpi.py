@@ -22,35 +22,38 @@ duration = 0  # Duration for which the LED was on
 # InfluxDB Configuration
 token = os.environ.get("INFLUXDB_TOKEN")
 org = "sabresmedia"
-bucket = "sabresmedia"
+bucket = "freedomDemo"
 url = "http://10.2.8.225:8086"
 
 # Setup InfluxDB client
 client = InfluxDBClient(url=url, token=token, org=org)
 write_api = client.write_api(write_options=SYNCHRONOUS)
 
-def log_led_state(state, duration=0):
+def log_led_state(state, duration=0.0):
     """
-    Log the LED state to InfluxDB.
+    Log the LED state ('on' or 'off') and duration to InfluxDB as a float for accuracy.
+    
+    :param state: The state of the LED ('on' or 'off').
+    :param duration: The duration for which the LED was on, in seconds, as a float.
     """
     try:
         # Convert state to an appropriate format for InfluxDB
         state_value = 1 if state == 'on' else 0  # Ensuring data type consistency
-        duration_int = int(duration)  # Ensure duration is an integer
         
-        print(f"Attempting to log LED state: {state}, Duration: {duration_int}")
+        print(f"Attempting to log LED state: {state}, Duration: {duration}")
         
         # Creating the data point
         point = Point("led_state") \
             .tag("device", "raspberrypi") \
             .field("state", state_value) \
-            .field("duration", duration_int) \
+            .field("duration", float(duration)) \
             .time(time.time_ns(), WritePrecision.NS)
         
         # Writing the data point to InfluxDB
         write_api.write(bucket=bucket, org=org, record=point)
         
         print("LED state logged successfully.")
+        
     except Exception as e:
         print(f"Failed to log LED state: {e}")
 
