@@ -58,7 +58,6 @@ def log_led_state(state, duration=0.0):
         print(f"Failed to log LED state: {e}")
 
 
-
 class MyServer(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.send_response(200)
@@ -71,13 +70,9 @@ class MyServer(BaseHTTPRequestHandler):
         self.send_header('Location', path)
         self.end_headers()
 
-    
     def do_GET(self):
         self.do_HEAD()
-        if led_state:
-            elapsed_time = round(time.time() - start_time, 2)
-        else:
-            elapsed_time = 0
+        elapsed_time = round(time.time() - start_time, 2) if led_state else 0
 
         html = f'''
            <html>
@@ -85,22 +80,26 @@ class MyServer(BaseHTTPRequestHandler):
                <title>WASH LED Control</title>
                <script>
                    function updateTimer() {{
-                       var xhttp = new XMLHttpRequest();
-                       xhttp.onreadystatechange = function() {{
-                           if (this.readyState == 4 && this.status == 200) {{
-                               document.getElementById("timer").innerHTML = this.responseText;
-                           }}
-                       }};
-                       xhttp.open("GET", "timer", true);
-                       xhttp.send();
+                       if (!document.getElementById("ledState").checked) {{
+                           clearInterval(timerInterval);
+                       }}
                    }}
-                   setInterval(updateTimer, 1000);
+
+                   var timerInterval = setInterval(function() {{
+                       var timerElement = document.getElementById("timer");
+                       if (timerElement) {{
+                           var currentTime = parseFloat(timerElement.innerHTML);
+                           timerElement.innerHTML = (currentTime + 1.0).toFixed(2);
+                       }}
+                   }}, 1000);
+
                </script>
            </head>
            <body style="width:960px; margin: 20px auto; font-family: Arial, sans-serif;">
            <h1>WASH LED Control</h1>
            <p>LED Timer: <span id="timer">{elapsed_time}</span> seconds</p>
            <form action="/" method="POST">
+               <input type="checkbox" id="ledState" name="ledState" onchange="updateTimer()" {('checked' if led_state else '')} hidden>
                <input type="submit" name="submit" value="On" style="padding: 10px; font-size: 16px;">
                <input type="submit" name="submit" value="Off" style="padding: 10px; font-size: 16px;">
            </form>
@@ -120,8 +119,10 @@ class MyServer(BaseHTTPRequestHandler):
             start_time = time.time()
             grovepi.digitalWrite(led, 1)  # Turn LED on
         elif post_data == 'Off' and led_state:
+            duration = round(time.time() - start_time, 2)
             led_state = False
             grovepi.digitalWrite(led, 0)  # Turn LED off
+            log_led_state("off", duration)  # Log the state as 'off' and the duration
 
         self._redirect('/')  # Redirect back to the root url
 
