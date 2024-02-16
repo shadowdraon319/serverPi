@@ -70,7 +70,9 @@ class MyServer(BaseHTTPRequestHandler):
         self.send_header('Location', path)
         self.end_headers()
 
+
     def do_GET(self):
+        global led_state, start_time
         self.do_HEAD()
         elapsed_time = round(time.time() - start_time, 2) if led_state else 0
 
@@ -79,52 +81,69 @@ class MyServer(BaseHTTPRequestHandler):
            <head>
                <title>WASH LED Control</title>
                <script>
-                   function updateTimer() {{
-                       if (!document.getElementById("ledState").checked) {{
-                           clearInterval(timerInterval);
-                       }}
-                   }}
-
-                   var timerInterval = setInterval(function() {{
+                   document.addEventListener('DOMContentLoaded', (event) => {{
+                       var ledState = {str(led_state).lower()};
                        var timerElement = document.getElementById("timer");
-                       if (timerElement) {{
-                           var currentTime = parseFloat(timerElement.innerHTML);
-                           timerElement.innerHTML = (currentTime + 1.0).toFixed(2);
-                       }}
-                   }}, 1000);
+                       var startTime = {start_time};
+                       var currentTime = Math.round(Date.now() / 1000);
 
+                       function updateTimer() {{
+                           if (ledState) {{
+                               timerElement.innerHTML = (currentTime - startTime).toFixed(2);
+                           }}
+                       }}
+
+                       if (ledState) {{
+                           timerInterval = setInterval(updateTimer, 1000);
+                       }}
+                   }});
+
+                   function sendCommand(command) {{
+                       var xhttp = new XMLHttpRequest();
+                       xhttp.onreadystatechange = function() {{
+                           if (this.readyState == 4 && this.status == 200) {{
+                               clearInterval(timerInterval);
+                               if(command === 'Off') {{
+                                   ledState = false;
+                               }}
+                           }}
+                       }};
+                       xhttp.open("POST", "/", true);
+                       xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+                       xhttp.send("submit=" + command);
+                   }}
                </script>
            </head>
            <body style="width:960px; margin: 20px auto; font-family: Arial, sans-serif;">
            <h1>WASH LED Control</h1>
            <p>LED Timer: <span id="timer">{elapsed_time}</span> seconds</p>
-           <form action="/" method="POST">
-               <input type="checkbox" id="ledState" name="ledState" onchange="updateTimer()" {('checked' if led_state else '')} hidden>
-               <input type="submit" name="submit" value="On" style="padding: 10px; font-size: 16px;">
-               <input type="submit" name="submit" value="Off" style="padding: 10px; font-size: 16px;">
-           </form>
+           <button onclick="sendCommand('On')" style="padding: 10px; font-size: 16px;">On</button>
+           <button onclick="sendCommand('Off')" style="padding: 10px; font-size: 16px;">Off</button>
            </body>
            </html>
         '''
         self.wfile.write(html.encode("utf-8"))
 
     def do_POST(self):
-        global led_state, start_time
+        global led_state, start_time, duration
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode("utf-8")
         post_data = post_data.split("=")[1]
 
-        if post_data == 'On' and not led_state:
-            led_state = True
-            start_time = time.time()
-            grovepi.digitalWrite(led, 1)  # Turn LED on
-        elif post_data == 'Off' and led_state:
-            duration = round(time.time() - start_time, 2)
-            led_state = False
-            grovepi.digitalWrite(led, 0)  # Turn LED off
-            log_led_state("off", duration)  # Log the state as 'off' and the duration
+        if post_data == 'On':
+            if not led_state:
+                led_state = True
+                start_time = time.time()
+                grovepi.digitalWrite(led, 1)  # Turn LED on
+        elif post_data == 'Off':
+            if led_state:
+                led_state = False
+                duration = round(time.time() - start_time, 2)
+                grovepi.digitalWrite(led, 0)  # Turn LED off
+                log_led_state("off", duration)  # Log the state as 'off' and the duration
 
         self._redirect('/')  # Redirect back to the root url
+
 
 # Main
 if __name__ == '__main__':
