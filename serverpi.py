@@ -36,17 +36,21 @@ def log_led_state(state, duration=0):
     try:
         # Convert state to an appropriate format for InfluxDB
         state_value = 1 if state == 'on' else 0  # Ensuring data type consistency
+        duration_int = int(duration)  # Ensure duration is an integer
         
-        print(f"Attempting to log LED state: {state}, Duration: {duration}")
+        print(f"Attempting to log LED state: {state}, Duration: {duration_int}")
         
         # Creating the data point
-        point = Point("led_state").tag("device", "raspberrypi").field("state", state_value) .field("duration", duration).time(time.time_ns(), WritePrecision.NS)
+        point = Point("led_state") \
+            .tag("device", "raspberrypi") \
+            .field("state", state_value) \
+            .field("duration", duration_int) \
+            .time(time.time_ns(), WritePrecision.NS)
         
         # Writing the data point to InfluxDB
         write_api.write(bucket=bucket, org=org, record=point)
         
         print("LED state logged successfully.")
-        
     except Exception as e:
         print(f"Failed to log LED state: {e}")
 
