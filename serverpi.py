@@ -57,9 +57,7 @@ def log_led_state(state, duration=0.0):
     except Exception as e:
         print(f"Failed to log LED state: {e}")
 
-def getTemperature():
-    temp = os.popen("/opt/vc/bin/vcgencmd measure_temp").read()
-    return temp
+
 
 class MyServer(BaseHTTPRequestHandler):
     def do_HEAD(self):
@@ -73,45 +71,58 @@ class MyServer(BaseHTTPRequestHandler):
         self.send_header('Location', path)
         self.end_headers()
 
+    
     def do_GET(self):
-        global duration
+        self.do_HEAD()
+        if led_state:
+            elapsed_time = round(time.time() - start_time, 2)
+        else:
+            elapsed_time = 0
+
         html = f'''
            <html>
-           <body style="width:960px; margin: 20px auto;">
-           <h1>Welcome to my Raspberry Pi</h1>
-           <p>Current GPU temperature is {getTemperature()[5:]}</p>
-           <p>LED was on for {duration} seconds.</p>
+           <head>
+               <title>WASH LED Control</title>
+               <script>
+                   function updateTimer() {{
+                       var xhttp = new XMLHttpRequest();
+                       xhttp.onreadystatechange = function() {{
+                           if (this.readyState == 4 && this.status == 200) {{
+                               document.getElementById("timer").innerHTML = this.responseText;
+                           }}
+                       }};
+                       xhttp.open("GET", "timer", true);
+                       xhttp.send();
+                   }}
+                   setInterval(updateTimer, 1000);
+               </script>
+           </head>
+           <body style="width:960px; margin: 20px auto; font-family: Arial, sans-serif;">
+           <h1>WASH LED Control</h1>
+           <p>LED Timer: <span id="timer">{elapsed_time}</span> seconds</p>
            <form action="/" method="POST">
-               Turn LED :
-               <input type="submit" name="submit" value="On">
-               <input type="submit" name="submit" value="Off">
+               <input type="submit" name="submit" value="On" style="padding: 10px; font-size: 16px;">
+               <input type="submit" name="submit" value="Off" style="padding: 10px; font-size: 16px;">
            </form>
            </body>
            </html>
         '''
-        self.do_HEAD()
         self.wfile.write(html.encode("utf-8"))
 
     def do_POST(self):
-        global led_state, start_time, duration
-        content_length = int(self.headers['Content-Length'])  # Gets the size of data
-        post_data = self.rfile.read(content_length).decode("utf-8")  # Gets the data itself
-        post_data = post_data.split("=")[1]  # Parses the data
+        global led_state, start_time
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length).decode("utf-8")
+        post_data = post_data.split("=")[1]
 
         if post_data == 'On' and not led_state:
             led_state = True
             start_time = time.time()
             grovepi.digitalWrite(led, 1)  # Turn LED on
-            log_led_state("on")  # Log LED state as on
         elif post_data == 'Off' and led_state:
             led_state = False
-            end_time = time.time()
-            duration = round(end_time - start_time, 2)  # Calculate duration in seconds
             grovepi.digitalWrite(led, 0)  # Turn LED off
-            log_led_state("off", duration)  # Log LED state as off and duration
 
-        print(f"LED is {post_data}")
-        print(f"LED was on for {duration} seconds.") if duration else print("")
         self._redirect('/')  # Redirect back to the root url
 
 # Main
